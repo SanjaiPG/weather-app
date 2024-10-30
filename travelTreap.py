@@ -1,12 +1,13 @@
 from tkinter import *
-from tkinter import ttk 
 import random
 import subprocess
+import json
+import os
 
 class TreapNode:
-    def __init__(self, key):
-        self.key = key
-        self.priority = random.randint(1, 100) 
+    def __init__(self, location):
+        self.location = location
+        self.priority = random.randint(1, 100)
         self.left = None
         self.right = None
 
@@ -26,36 +27,34 @@ class Treap:
         rightChild.left = root
         return rightChild
 
-    def insert(self, root, key):
+    def insert(self, root, location):
         if root is None:
-            return TreapNode(key)
+            return TreapNode(location)
 
-        if key < root.key:
-            root.left = self.insert(root.left, key)
+        if location < root.location:
+            root.left = self.insert(root.left, location)
             if root.left.priority > root.priority:
-                root = self.rotateRight(root) 
+                root = self.rotateRight(root)
         else:
-            root.right = self.insert(root.right, key)
+            root.right = self.insert(root.right, location)
             if root.right.priority > root.priority:
-                root = self.rotateLeft(root)  
+                root = self.rotateLeft(root)
 
         return root
 
-    def insertNode(self, key):
-        self.root = self.insert(self.root, key)
+    def insertNode(self, location):
+        self.root = self.insert(self.root, location)
 
     def search(self, root, prefix):
         if root is None:
             return []
 
         results = []
-        if root.key.startswith(prefix):
-            results.append(root.key)
+        if root.location.lower().startswith(prefix.lower()):
+            results.append(root.location)
 
-        if prefix < root.key:
-            results += self.search(root.left, prefix)
-        else:
-            results += self.search(root.right, prefix)
+        results += self.search(root.left, prefix)
+        results += self.search(root.right, prefix)
 
         return results
 
@@ -67,76 +66,111 @@ class LocationGraph:
         self.locations = []
         self.treap = Treap()
 
-    def add_locations(self, new_locations):
-        for location in new_locations:
-            self.treap.insertNode(location) 
-            self.locations.append(location)
+    def addLocations(self, newLocations):
+        combinedLocation = f"{newLocations[0]} -> {newLocations[1]}"
+        self.treap.insertNode(combinedLocation)
+        self.locations.append(combinedLocation)
 
-    def search_locations(self, prefix):
+    def searchLocations(self, prefix):
         return self.treap.searchPrefix(prefix)
 
 class App:
     def __init__(self, root):
-        self.window = root 
+        self.window = root
         self.window.title("Location Search")
+        self.window.geometry("600x600")
+        self.window.configure(bg="#f0f0f0")
 
         self.location_graph = LocationGraph()
 
-        self.label = Label(self.window, text="Enter locations (comma-separated):")
-        self.label.pack()
+        self.label_arrival = Label(self.window, text="Enter arrival location:", bg="#f0f0f0")
+        self.label_arrival.pack(pady=(20, 5))
 
-        self.location_entry = Entry(self.window, width=50)
-        self.location_entry.pack()
+        self.arrival_entry = Entry(self.window, width=50)
+        self.arrival_entry.pack(pady=(0, 10))
 
-        self.submit_button = Button(self.window, text="Submit Locations", command=self.submit_locations)
-        self.submit_button.pack(pady=10)
+        self.label_destination = Label(self.window, text="Enter destination location:", bg="#f0f0f0")
+        self.label_destination.pack(pady=(10, 5))
 
-        self.label_select = Label(self.window, text="Select a location:")
-        self.label_select.pack()
+        self.destination_entry = Entry(self.window, width=50)
+        self.destination_entry.pack(pady=(0, 20))
 
-        self.combo_box = ttk.Combobox(self.window, values=self.location_graph.locations)
-        self.combo_box.pack()
+        self.submit_button = Button(self.window, text="Submit Locations", command=self.submitLocations, bg="#4CAF50", fg="white")
+        self.submit_button.pack(pady=(10, 20))
 
-        self.button = Button(self.window, text="Search", command=self.handle_search)
-        self.button.pack(pady=10)
+        self.label_search = Label(self.window, text="Search locations:", bg="#f0f0f0")
+        self.label_search.pack(pady=(10, 5))
 
-        self.result_label = Label(self.window, text="")
-        self.result_label.pack()
+        self.search_entry = Entry(self.window, width=50)
+        self.search_entry.pack(pady=(0, 5))
 
-        self.yes_button = Button(self.window, text="Yes", command=self.execute_weather_code)
-        self.no_button = Button(self.window, text="No", command=self.display_thank_you)
+        self.search_button = Button(self.window, text="Search", command=self.performSearch, bg="#2196F3", fg="white")
+        self.search_button.pack(pady=(5, 20))
 
-        self.yes_button.pack_forget()
-        self.no_button.pack_forget()
+        self.result_listbox = Listbox(self.window, width=50)
+        self.result_listbox.pack()
 
-    def submit_locations(self):
-        locations_input = self.location_entry.get().split(',')
-        new_locations = [loc.strip() for loc in locations_input if loc.strip()]
+        self.result_label = Label(self.window, text="", bg="#f0f0f0")
+        self.result_label.pack(pady=(10, 10))
 
-        self.location_graph.add_locations(new_locations)
+        self.weather_button = Button(self.window, text="Get Weather Info", command=self.openWeatherApp, bg="#2196F3", fg="white")
+        self.weather_button.pack(pady=(20, 10))
 
-        self.combo_box['values'] = self.location_graph.locations
-        self.location_entry.delete(0, END)
+        self.window.protocol("WM_DELETE_WINDOW", self.clearJson)
 
-    def handle_search(self):
-        location = self.combo_box.get()
-        self.display_results(location)
+    def clearJson(self):
+        if os.path.exists("locations.json"):
+            open("locations.json", "w").close()
+        self.window.destroy()
 
-    def display_results(self, location):
-        self.result_label.configure(text=f"Do you want to check the weather forecast in {location}?")
-        self.yes_button.pack()
-        self.no_button.pack()
+    def submitLocations(self):
+        arrivalLocation = self.arrival_entry.get().strip()
+        destinationLocation = self.destination_entry.get().strip()
 
-    def execute_weather_code(self):
-        subprocess.Popen(["python", "weather_treap.py"])
+        if arrivalLocation and destinationLocation:
+            newLocations = [arrivalLocation, destinationLocation]
+            self.location_graph.addLocations(newLocations)
 
-    def display_thank_you(self):
-        self.result_label.configure(text="Thank you for using the weather app!")
+            # Handling JSON file
+            data = {"locations": []}
+            if os.path.exists("locations.json"):
+                with open("locations.json", "r") as json_file:
+                    try:
+                        content = json_file.read()
+                        if content.strip():
+                            data = json.loads(content)
+                    except json.JSONDecodeError:
+                        print("Error decoding JSON. Initializing with new data.")
+
+            data["locations"].append({"arrival": arrivalLocation, "destination": destinationLocation})
+
+            with open("locations.json", "w") as json_file:
+                json.dump(data, json_file)
+
+            self.arrival_entry.delete(0, END)
+            self.destination_entry.delete(0, END)
+
+            self.result_label.configure(text=f"Locations added: {newLocations}")
+
+    def performSearch(self):
+        prefix = self.search_entry.get()
+        results = self.location_graph.searchLocations(prefix)
+
+        self.result_listbox.delete(0, END)
+
+        if results:
+            for result in results:
+                self.result_listbox.insert(END, result)
+        else:
+            self.result_label.configure(text="No locations found.")
         
-        self.combo_box.pack_forget()
-        self.button.pack_forget()
-        self.yes_button.pack_forget()
-        self.no_button.pack_forget()
+        if results:
+            self.result_listbox.pack()
+        else:
+            self.result_listbox.place_forget()
+
+    def openWeatherApp(self):
+        subprocess.Popen(["python", "weather_treap.py"])
 
 root = Tk()
 app = App(root)
